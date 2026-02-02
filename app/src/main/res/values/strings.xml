@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">Character Animation</string>
+    <string name="emotion_label">Emotion: V=%.2f A=%.2f</string>
+    <string name="tap_instruction">Tap: L/R=Valence, U/D=Arousal</string>
+</resources>
