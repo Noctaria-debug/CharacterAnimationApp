@@ -31,7 +31,8 @@ jobs:
         
     - name: Build with Gradle
   run: |
-    ./gradlew assembleDebug
+    ./gradlew --no-daemon --version
+    ./gradlew --no-daemon assembleDebug
       
     - name: Upload APK
       uses: actions/upload-artifact@v4
