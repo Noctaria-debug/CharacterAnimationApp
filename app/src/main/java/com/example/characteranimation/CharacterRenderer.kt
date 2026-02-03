@@ -1,3 +1,7 @@
+# 追加＆置換して保存
+git add app/src/main/java/com/example/characteranimation/CharacterRenderer.kt
+git commit -m "Fit head to fixed width"
+git push
 package com.example.characteranimation
 
 import android.graphics.Bitmap
@@ -83,8 +87,16 @@ class CharacterRenderer(
         drawBitmap(canvas, armLeft, centerX - 80f * scale, centerY + 50f + bodyOffsetY, scale * 0.8f, armAngle)
         drawBitmap(canvas, armRight, centerX + 80f * scale, centerY + 50f + bodyOffsetY, scale * 0.8f, -armAngle)
         
-        drawBitmap(canvas, head, centerX, centerY - 100f + bodyOffsetY, scale, headTilt + headShake)
-        
+val HEAD_W = 220f  // ← まずはここから。小さくしたいなら 180〜200 あたり
+drawBitmapFitWidth(
+    canvas,
+    head,
+    centerX,
+    centerY - 100f + bodyOffsetY,
+    scale,
+    HEAD_W,
+    headTilt + headShake
+)        
         val eyeLeft = if (isBlinking) eyeLeftClosed else eyeLeftOpen
         val eyeRight = if (isBlinking) eyeRightClosed else eyeRightOpen
         drawBitmap(canvas, eyeLeft, centerX - 30f * scale, centerY - 110f + bodyOffsetY, scale * 0.5f, headTilt + headShake)
