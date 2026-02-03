@@ -13,13 +13,13 @@ class CharacterRenderer(
 
     private var elapsedTime = 0f
     private var blinkTimer = 0f
-    private val blinkInterval = 3f  // 3秒ごとに瞬き
+    private val blinkInterval = 3f // 3秒ごとに瞬き
     private var isBlinking = false
 
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val matrix = Matrix()
 
-    // パーツ
+    // === パーツ ===
     private lateinit var body: Bitmap
     private lateinit var head: Bitmap
     private lateinit var armLeft: Bitmap
@@ -51,7 +51,6 @@ class CharacterRenderer(
     fun update(deltaTime: Float) {
         elapsedTime += deltaTime
 
-        // 瞬きタイマー
         blinkTimer += deltaTime
         if (blinkTimer >= blinkInterval) {
             blinkTimer = 0f
@@ -68,7 +67,7 @@ class CharacterRenderer(
         val centerX = width / 2f
         val centerY = height / 2f
 
-        // 全体スケール（画面に合わせて）
+        // 画面に合わせた全体スケール
         val baseScale = (width / 500f).coerceAtMost(height / 700f)
 
         // 体の上下揺れ（arousalで振幅と速度変化）
@@ -84,61 +83,130 @@ class CharacterRenderer(
         // 頭の傾き（valenceで傾き方向）
         val headTilt = emotionData.valence * 10f
         val headShake = sin(elapsedTime * 1.5f) * 3f
+        val headRotation = headTilt + headShake
 
-        // ====== サイズ設計（「枠に合わせる」方式） ======
-        // ここを変えるだけで、差し替え画像の見た目サイズが揃う
-        val bodyTargetW = 260f * baseScale   // 胴体の表示幅
-        val headTargetW = 220f * baseScale   // 頭の表示幅（今は大きい→小さくするなら 180〜200）
-        val armTargetW  = 170f * baseScale   // 腕の表示幅
-        val eyeTargetW  = 60f  * baseScale   // 目の表示幅
-        val mouthTargetW = 90f * baseScale   // 口の表示幅
+        // === 体 ===
+        drawBitmapCentered(
+            canvas = canvas,
+            bitmap = body,
+            x = centerX,
+            y = centerY + 100f + bodyOffsetY,
+            scale = baseScale,
+            rotation = 0f
+        )
 
-        // 体
-        drawBitmapFitWidth(canvas, body, centerX, centerY + 120f + bodyOffsetY, bodyTargetW, 0f)
+        // === 腕（左右逆位相）===
+        drawBitmapCentered(
+            canvas = canvas,
+            bitmap = armLeft,
+            x = centerX - 80f * baseScale,
+            y = centerY + 50f + bodyOffsetY,
+            scale = baseScale * 0.8f,
+            rotation = armAngle
+        )
+        drawBitmapCentered(
+            canvas = canvas,
+            bitmap = armRight,
+            x = centerX + 80f * baseScale,
+            y = centerY + 50f + bodyOffsetY,
+            scale = baseScale * 0.8f,
+            rotation = -armAngle
+        )
 
-        // 腕（左右逆位相）
-        drawBitmapFitWidth(canvas, armLeft, centerX - 95f * baseScale, centerY + 70f + bodyOffsetY, armTargetW, armAngle)
-        drawBitmapFitWidth(canvas, armRight, centerX + 95f * baseScale, centerY + 70f + bodyOffsetY, armTargetW, -armAngle)
+        // === 頭グループ（首支点でまとめて回す）===
+        // head の首支点（画像内の比率）
+        val headPivotXR = 0.5f
+        val headPivotYR = 0.90f  // ← ここが「だいたい90%」の指定
 
-        // 頭
-        drawBitmapFitWidth(canvas, head, centerX, centerY - 80f + bodyOffsetY, headTargetW, headTilt + headShake)
+        val headX = centerX
+        val headY = centerY - 100f + bodyOffsetY
 
-        // 目（瞬き）
-        val eyeLeft = if (isBlinking) eyeLeftClosed else eyeLeftOpen
-        val eyeRight = if (isBlinking) eyeRightClosed else eyeRightOpen
-        drawBitmapFitWidth(canvas, eyeLeft, centerX - 38f * baseScale, centerY - 92f + bodyOffsetY, eyeTargetW, headTilt + headShake)
-        drawBitmapFitWidth(canvas, eyeRight, centerX + 38f * baseScale, centerY - 92f + bodyOffsetY, eyeTargetW, headTilt + headShake)
-
-        // 口（arousalで開閉）
-        val mouth = if (emotionData.arousal > 0.6f) mouthOpen else mouthClosed
-        drawBitmapFitWidth(canvas, mouth, centerX, centerY - 55f + bodyOffsetY, mouthTargetW, headTilt + headShake)
+        drawHeadGroup(
+            canvas = canvas,
+            headX = headX,
+            headY = headY,
+            baseScale = baseScale,
+            rotation = headRotation,
+            headPivotXR = headPivotXR,
+            headPivotYR = headPivotYR
+        )
     }
 
     /**
-     * bitmap を「指定した表示幅 targetW」にフィットさせて描画する。
-     * 画像サイズがバラバラでも、見た目を揃えやすい。
+     * 頭 + 目 + 口 を「首支点」で1つの剛体として回転させる
      */
-    private fun drawBitmapFitWidth(
+    private fun drawHeadGroup(
+        canvas: Canvas,
+        headX: Float,
+        headY: Float,
+        baseScale: Float,
+        rotation: Float,
+        headPivotXR: Float,
+        headPivotYR: Float
+    ) {
+        val eyeLeft = if (isBlinking) eyeLeftClosed else eyeLeftOpen
+        val eyeRight = if (isBlinking) eyeRightClosed else eyeRightOpen
+        val mouth = if (emotionData.arousal > 0.6f) mouthOpen else mouthClosed
+
+        // 目・口のローカル配置（「頭の基準点＝center」からのオフセットをそのまま使う）
+        // 元コードの world座標: (centerX ± 30*scale, centerY -110 + bodyOffsetY)
+        // 頭は (centerX, centerY -100 + bodyOffsetY) なので差分は (-30, -10) / (+30, -10)
+        val eyeOffsetLeftX = -30f
+        val eyeOffsetRightX = +30f
+        val eyeOffsetY = -10f
+        val mouthOffsetY = +30f
+
+        canvas.save()
+        // 首支点をワールド座標に合わせる
+        canvas.translate(headX, headY)
+        canvas.rotate(rotation)
+        canvas.scale(baseScale, baseScale)
+
+        // head を「首支点が(0,0)に来る」ように描画
+        val headPivotX = head.width * headPivotXR
+        val headPivotY = head.height * headPivotYR
+        canvas.drawBitmap(head, -headPivotX, -headPivotY, paint)
+
+        // 左目
+        canvas.save()
+        canvas.translate(eyeOffsetLeftX, eyeOffsetY)
+        canvas.scale(0.5f, 0.5f)
+        canvas.drawBitmap(eyeLeft, -eyeLeft.width / 2f, -eyeLeft.height / 2f, paint)
+        canvas.restore()
+
+        // 右目
+        canvas.save()
+        canvas.translate(eyeOffsetRightX, eyeOffsetY)
+        canvas.scale(0.5f, 0.5f)
+        canvas.drawBitmap(eyeRight, -eyeRight.width / 2f, -eyeRight.height / 2f, paint)
+        canvas.restore()
+
+        // 口
+        canvas.save()
+        canvas.translate(0f, mouthOffsetY)
+        canvas.scale(0.6f, 0.6f)
+        canvas.drawBitmap(mouth, -mouth.width / 2f, -mouth.height / 2f, paint)
+        canvas.restore()
+
+        canvas.restore()
+    }
+
+    /**
+     * 画像中心を基準に回転・拡縮して描画（体・腕など用）
+     */
+    private fun drawBitmapCentered(
         canvas: Canvas,
         bitmap: Bitmap,
         x: Float,
         y: Float,
-        targetW: Float,
+        scale: Float,
         rotation: Float
     ) {
-        val bw = bitmap.width.toFloat().coerceAtLeast(1f)
-        val scale = targetW / bw
-        drawBitmap(canvas, bitmap, x, y, scale, rotation)
-    }
-
-    private fun drawBitmap(canvas: Canvas, bitmap: Bitmap, x: Float, y: Float, scale: Float, rotation: Float) {
         matrix.reset()
+        matrix.postTranslate(-bitmap.width / 2f, -bitmap.height / 2f)
         matrix.postScale(scale, scale)
         matrix.postRotate(rotation)
-        matrix.postTranslate(
-            x - bitmap.width * scale / 2f,
-            y - bitmap.height * scale / 2f
-        )
+        matrix.postTranslate(x, y)
         canvas.drawBitmap(bitmap, matrix, paint)
     }
 }
